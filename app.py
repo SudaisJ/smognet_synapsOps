@@ -245,6 +245,59 @@ with tab1:
     # Slice data to last 'days_to_show' days for better visualization
     plot_df = city_df.tail(days_to_show * 24)
     
+    col_map, col_gauge = st.columns([6, 4])
+    with col_map:
+        st.markdown("**🌐 Live National AQI Map**")
+        city_coords = {
+            "Lahore": [31.5204, 74.3587], "Karachi": [24.8607, 67.0011], 
+            "Islamabad": [33.6844, 73.0479], "Peshawar": [34.0151, 71.5249], 
+            "Quetta": [30.1798, 66.9750]
+        }
+        map_data = []
+        for c in city_coords.keys():
+            c_df = df[df['City'] == c]
+            if not c_df.empty:
+                val = c_df.iloc[-1]['PM2.5']
+                map_data.append({"City": c, "lat": city_coords[c][0], "lon": city_coords[c][1], "PM2.5": val})
+        
+        map_df = pd.DataFrame(map_data)
+        fig_map = go.Figure(go.Scattermapbox(
+            lat=map_df['lat'], lon=map_df['lon'], mode='markers',
+            marker=dict(size=map_df['PM2.5'].clip(lower=10, upper=50)*0.5, color=map_df['PM2.5'], colorscale='YlOrRd', showscale=True, opacity=0.9),
+            text=map_df['City'] + '<br>PM2.5: ' + map_df['PM2.5'].astype(str) + ' µg/m³',
+            hoverinfo='text'
+        ))
+        fig_map.update_layout(
+            mapbox=dict(style="carto-darkmatter", center=dict(lat=30.3753, lon=69.3451), zoom=4),
+            margin=dict(l=0, r=0, t=0, b=0), height=350, template="plotly_dark",
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
+        )
+        st.plotly_chart(fig_map, use_container_width=True)
+
+    with col_gauge:
+        st.markdown(f"**⚡ Current AQI Gauge: {selected_city}**")
+        fig_gauge = go.Figure(go.Indicator(
+            mode = "gauge+number+delta",
+            value = latest_data['PM2.5'],
+            delta = {'reference': 50, 'increasing': {'color': "red"}, 'decreasing': {'color': "green"}},
+            title = {'text': "PM2.5 µg/m³", 'font': {'size': 20, 'color': '#94a3b8'}},
+            gauge = {
+                'axis': {'range': [None, 300], 'tickwidth': 1, 'tickcolor': "white"},
+                'bar': {'color': "#38bdf8"},
+                'bgcolor': "rgba(0,0,0,0)",
+                'borderwidth': 2,
+                'bordercolor': "gray",
+                'steps': [
+                    {'range': [0, 50], 'color': "rgba(16, 185, 129, 0.3)"},
+                    {'range': [50, 150], 'color': "rgba(245, 158, 11, 0.3)"},
+                    {'range': [150, 300], 'color': "rgba(239, 68, 68, 0.3)"}],
+            }
+        ))
+        fig_gauge.update_layout(height=300, margin=dict(l=30, r=30, t=40, b=20), template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_gauge, use_container_width=True)
+    
+    st.markdown("---")
+    
     # Real-time Chart
     fig = go.Figure()
     # 1. Rolling Mean (Baseline)
@@ -301,6 +354,35 @@ with tab2:
         for spine in ['bottom', 'left']: ax_bar.spines[spine].set_color('#334155')
         for spine in ['top', 'right']: ax_bar.spines[spine].set_visible(False)
         st.pyplot(fig_bar)
+        
+    st.markdown("---")
+    st.subheader("🔬 Chemical Fingerprint Radar (Latest Hour)")
+    
+    categories = ['PM10', 'NH3', 'CO', 'NO2', 'SO2']
+    max_vals = df[categories].max()
+    norm_vals = [latest_data[c] / max_vals[c] if max_vals[c] > 0 else 0 for c in categories]
+    
+    fig_radar = go.Figure()
+    fig_radar.add_trace(go.Scatterpolar(
+        r=norm_vals + [norm_vals[0]], 
+        theta=categories + [categories[0]], 
+        fill='toself',
+        fillcolor='rgba(56, 189, 248, 0.4)',
+        line=dict(color='#38bdf8'),
+        name='Current Fingerprint'
+    ))
+    fig_radar.update_layout(
+        polar=dict(
+            radialaxis=dict(visible=False, range=[0, 1]),
+            angularaxis=dict(color="white", tickfont=dict(size=14))
+        ),
+        showlegend=False,
+        template="plotly_dark",
+        height=400,
+        margin=dict(l=40, r=40, t=40, b=40),
+        paper_bgcolor='rgba(0,0,0,0)'
+    )
+    st.plotly_chart(fig_radar, use_container_width=True)
     
     st.markdown("---")
     st.subheader("🌩️ Meteorological Correlation Analytics")
