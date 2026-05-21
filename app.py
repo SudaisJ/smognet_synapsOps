@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
+import pydeck as pdk
 
 # --- PAGE CONFIGURATION & UI THEME ---
 st.set_page_config(page_title="SmogNet Intelligence", layout="wide", initial_sidebar_state="expanded")
@@ -38,8 +39,25 @@ st.markdown("""
     }
     [data-testid="metric-container"]:hover {
         border-color: #38bdf8;
-        transform: translateY(-2px);
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        transform: translateY(-5px) scale(1.02);
+        box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 15px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 60px;
+        white-space: pre-wrap;
+        background-color: rgba(30, 41, 59, 0.5);
+        border-radius: 8px 8px 0px 0px;
+        padding: 10px 20px;
+        font-weight: 600;
+        font-size: 18px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: rgba(56, 189, 248, 0.2);
+        border-bottom: 3px solid #38bdf8;
+        box-shadow: 0 -5px 15px rgba(56, 189, 248, 0.2);
     }
     .stAlert {
         border-radius: 12px;
@@ -220,133 +238,143 @@ col5.metric("Sensor Uptime", f"{health_pct:.1f}%", delta="Stable", delta_color="
 
 st.markdown("---")
 
-# Main Chart Setup
-st.subheader(f"📈 Real-Time Pollution Trends & Anomalies: {selected_city}")
+tab1, tab2, tab3 = st.tabs(["🌐 Live Command Center", "🧪 AI & Meteorological Analytics", "🚨 Public Alerts & Export"])
 
-# Slice data to last 'days_to_show' days for better visualization
-plot_df = city_df.tail(days_to_show * 24)
-
-fig = go.Figure()
-
-# 1. Rolling Mean (Baseline)
-fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Rolling_Mean'], mode='lines', 
-                         name='7-Day Baseline', line=dict(color='rgba(255, 255, 255, 0.4)', dash='dash')))
-
-# 2. Actual Data
-fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['PM2.5'], mode='lines', 
-                         name='PM2.5 Levels', line=dict(color='#00e5ff', width=2)))
-
-# 3. Highlight Spikes
-spikes = plot_df[plot_df['Is_Spike']]
-if not spikes.empty:
-    fig.add_trace(go.Scatter(x=spikes.index, y=spikes['PM2.5'], mode='markers', name='Anomalies Detected', 
-                             marker=dict(color='red', size=8, line=dict(width=2, color='white'))))
-
-# 4. Predictive Forecasting (Next 24 Hours)
-last_24 = plot_df['PM2.5'].tail(24)
-if not last_24.empty and len(last_24) > 1:
-    slope = (last_24.iloc[-1] - last_24.iloc[0]) / len(last_24)
-    future_index = pd.date_range(start=plot_df.index[-1] + pd.Timedelta(hours=1), periods=24, freq='h')
-    future_values = [max(0, last_24.iloc[-1] + (slope * i)) for i in range(1, 25)]
-    fig.add_trace(go.Scatter(x=future_index, y=future_values, mode='lines', 
-                             name='24hr Forecast (AI Predicted)', line=dict(color='#f59e0b', dash='dot', width=2)))
-
-fig.update_layout(template="plotly_dark", height=450, margin=dict(l=0, r=0, t=30, b=0),
-                  legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-st.plotly_chart(fig, use_container_width=True)
-
-st.markdown("---")
-
-st.subheader(f"📊 Advanced Deduced Analytics: {selected_city}")
-col_pie, col_bar = st.columns(2)
-
-with col_pie:
-    st.markdown(f"**Predicted Pollution Sources (Last {days_to_show} Days)**")
-    source_counts = plot_df['Source'].value_counts()
+with tab1:
+    st.subheader(f"📈 Real-Time Pollution Trends & Anomalies: {selected_city}")
+    # Slice data to last 'days_to_show' days for better visualization
+    plot_df = city_df.tail(days_to_show * 24)
     
-    fig_pie, ax_pie = plt.subplots(figsize=(6, 6))
-    fig_pie.patch.set_facecolor('#0f172a')
-    ax_pie.set_facecolor('#0f172a')
+    # 3D Map
+    st.markdown("**National AQI Heatmap (Live)**")
+    city_coords = {
+        "Lahore": [74.3587, 31.5204],
+        "Karachi": [67.0011, 24.8607],
+        "Islamabad": [73.0479, 33.6844],
+        "Peshawar": [71.5249, 34.0151],
+        "Quetta": [66.9750, 30.1798]
+    }
+    map_data = []
+    for c in ["Lahore", "Karachi", "Islamabad", "Peshawar", "Quetta"]:
+        c_df = df[df['City'] == c]
+        if not c_df.empty:
+            latest = c_df.iloc[-1]['PM2.5']
+            map_data.append({"city": c, "lon": city_coords[c][0], "lat": city_coords[c][1], "pm25": latest, "radius": latest * 50})
     
-    colors = ['#38bdf8', '#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#64748b']
+    map_df = pd.DataFrame(map_data)
+    st.pydeck_chart(pdk.Deck(
+        map_style='mapbox://styles/mapbox/dark-v10',
+        initial_view_state=pdk.ViewState(latitude=30.3753, longitude=69.3451, zoom=4.5, pitch=45),
+        layers=[
+            pdk.Layer(
+                'ColumnLayer',
+                data=map_df,
+                get_position='[lon, lat]',
+                get_elevation='pm25',
+                elevation_scale=500,
+                radius=15000,
+                get_fill_color='[255, (255 - pm25*1.5), 0, 200]',
+                pickable=True,
+                auto_highlight=True,
+            ),
+        ],
+        tooltip={"text": "{city}\nPM2.5: {pm25} µg/m³"}
+    ))
+
+    # Real-time Chart
+    fig = go.Figure()
+    # 1. Rolling Mean (Baseline)
+    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Rolling_Mean'], mode='lines', 
+                             name='7-Day Baseline', line=dict(color='rgba(255, 255, 255, 0.4)', dash='dash')))
+    # 2. Actual Data
+    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['PM2.5'], mode='lines', 
+                             name='PM2.5 Levels', line=dict(color='#00e5ff', width=2)))
+    # 3. Highlight Spikes
+    spikes = plot_df[plot_df['Is_Spike']]
+    if not spikes.empty:
+        fig.add_trace(go.Scatter(x=spikes.index, y=spikes['PM2.5'], mode='markers', name='Anomalies Detected', 
+                                 marker=dict(color='red', size=8, line=dict(width=2, color='white'))))
+    # 4. Predictive Forecasting (Next 24 Hours)
+    last_24 = plot_df['PM2.5'].tail(24)
+    if not last_24.empty and len(last_24) > 1:
+        slope = (last_24.iloc[-1] - last_24.iloc[0]) / len(last_24)
+        future_index = pd.date_range(start=plot_df.index[-1] + pd.Timedelta(hours=1), periods=24, freq='h')
+        future_values = [max(0, last_24.iloc[-1] + (slope * i)) for i in range(1, 25)]
+        fig.add_trace(go.Scatter(x=future_index, y=future_values, mode='lines', 
+                                 name='24hr Forecast (AI Predicted)', line=dict(color='#f59e0b', dash='dot', width=2)))
     
-    wedges, texts, autotexts = ax_pie.pie(
-        source_counts, 
-        autopct='%1.1f%%', 
-        startangle=90, 
-        colors=colors[:len(source_counts)],
-        textprops=dict(color="w", fontweight='bold'),
-        pctdistance=0.75
-    )
-    ax_pie.legend(wedges, source_counts.index,
-          title="Sources",
-          loc="center left",
-          bbox_to_anchor=(1, 0.5))
-    ax_pie.axis('equal')
-    st.pyplot(fig_pie)
+    fig.update_layout(template="plotly_dark", height=450, margin=dict(l=0, r=0, t=30, b=0),
+                      legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+    st.plotly_chart(fig, use_container_width=True)
 
-with col_bar:
-    st.markdown("**PM2.5 Density Distribution**")
-    fig_bar, ax_bar = plt.subplots(figsize=(6, 6))
-    fig_bar.patch.set_facecolor('#0f172a')
-    ax_bar.set_facecolor('#1e293b')
+with tab2:
+    st.subheader(f"📊 Advanced Deduced Analytics: {selected_city}")
+    col_pie, col_bar = st.columns(2)
     
-    ax_bar.hist(plot_df['PM2.5'], bins=25, color='#38bdf8', edgecolor='#ffffff', alpha=0.8)
-    ax_bar.set_xlabel('PM2.5 Concentration (µg/m³)', color='#94a3b8')
-    ax_bar.set_ylabel('Frequency (Hours)', color='#94a3b8')
-    ax_bar.tick_params(colors='white')
-    for spine in ['bottom', 'left']:
-        ax_bar.spines[spine].set_color('#334155')
-    for spine in ['top', 'right']:
-        ax_bar.spines[spine].set_visible(False)
+    with col_pie:
+        st.markdown(f"**Predicted Pollution Sources (Last {days_to_show} Days)**")
+        source_counts = plot_df['Source'].value_counts()
+        fig_pie, ax_pie = plt.subplots(figsize=(6, 6))
+        fig_pie.patch.set_facecolor('#0f172a')
+        ax_pie.set_facecolor('#0f172a')
+        colors = ['#38bdf8', '#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#64748b']
+        wedges, texts, autotexts = ax_pie.pie(
+            source_counts, autopct='%1.1f%%', startangle=90, 
+            colors=colors[:len(source_counts)], textprops=dict(color="w", fontweight='bold'), pctdistance=0.75)
+        ax_pie.legend(wedges, source_counts.index, title="Sources", loc="center left", bbox_to_anchor=(1, 0.5))
+        ax_pie.axis('equal')
+        st.pyplot(fig_pie)
     
-    st.pyplot(fig_bar)
-
-st.markdown("---")
-st.subheader("🌩️ Meteorological Correlation Analytics")
-col_scatter, col_wind = st.columns(2)
-
-with col_scatter:
-    st.markdown("**Temperature vs PM2.5 Inversion Effect**")
-    fig_scatter = go.Figure()
-    fig_scatter.add_trace(go.Scatter(x=plot_df['Temperature'], y=plot_df['PM2.5'], mode='markers',
-                                    marker=dict(color=plot_df['PM2.5'], colorscale='YlOrRd', showscale=False)))
-    fig_scatter.update_layout(template="plotly_dark", height=350, margin=dict(l=0, r=0, t=30, b=0),
-                             xaxis_title="Temperature (°C)", yaxis_title="PM2.5 Concentration (µg/m³)")
-    st.plotly_chart(fig_scatter, use_container_width=True)
-
-with col_wind:
-    st.markdown("**Wind Speed vs Pollution Dilution**")
-    fig_wind = go.Figure()
-    fig_wind.add_trace(go.Scatter(x=plot_df['Wind_Speed'], y=plot_df['PM2.5'], mode='markers',
-                                 marker=dict(color='#00e5ff', opacity=0.6)))
-    fig_wind.update_layout(template="plotly_dark", height=350, margin=dict(l=0, r=0, t=30, b=0),
-                          xaxis_title="Wind Speed (km/h)", yaxis_title="PM2.5 Concentration (µg/m³)")
-    st.plotly_chart(fig_wind, use_container_width=True)
-
-st.markdown("---")
-
-# Alert Feed
-st.subheader("🚨 Live Public Alerts Feed")
-if not spikes.empty:
-    # Get unique days where spikes occurred to avoid spamming alerts for every single hour of a spike
-    recent_spikes = spikes.resample('D').first().dropna().tail(5).iloc[::-1]
+    with col_bar:
+        st.markdown("**PM2.5 Density Distribution**")
+        fig_bar, ax_bar = plt.subplots(figsize=(6, 6))
+        fig_bar.patch.set_facecolor('#0f172a')
+        ax_bar.set_facecolor('#1e293b')
+        ax_bar.hist(plot_df['PM2.5'], bins=25, color='#38bdf8', edgecolor='#ffffff', alpha=0.8)
+        ax_bar.set_xlabel('PM2.5 Concentration (µg/m³)', color='#94a3b8')
+        ax_bar.set_ylabel('Frequency (Hours)', color='#94a3b8')
+        ax_bar.tick_params(colors='white')
+        for spine in ['bottom', 'left']: ax_bar.spines[spine].set_color('#334155')
+        for spine in ['top', 'right']: ax_bar.spines[spine].set_visible(False)
+        st.pyplot(fig_bar)
     
-    for idx, row in recent_spikes.iterrows():
-        alert_msg = generate_alert(selected_city, row['Source'], row['PM2.5'])
-        st.error(f"**{idx.strftime('%Y-%m-%d %H:%00')}** | {alert_msg}")
-else:
-    st.success(f"✅ Air quality stable. No recent anomalies detected in {selected_city}.")
+    st.markdown("---")
+    st.subheader("🌩️ Meteorological Correlation Analytics")
+    col_scatter, col_wind = st.columns(2)
+    with col_scatter:
+        st.markdown("**Temperature vs PM2.5 Inversion Effect**")
+        fig_scatter = go.Figure()
+        fig_scatter.add_trace(go.Scatter(x=plot_df['Temperature'], y=plot_df['PM2.5'], mode='markers',
+                                        marker=dict(color=plot_df['PM2.5'], colorscale='YlOrRd', showscale=False)))
+        fig_scatter.update_layout(template="plotly_dark", height=350, margin=dict(l=0, r=0, t=30, b=0),
+                                 xaxis_title="Temperature (°C)", yaxis_title="PM2.5 Concentration (µg/m³)")
+        st.plotly_chart(fig_scatter, use_container_width=True)
+    with col_wind:
+        st.markdown("**Wind Speed vs Pollution Dilution**")
+        fig_wind = go.Figure()
+        fig_wind.add_trace(go.Scatter(x=plot_df['Wind_Speed'], y=plot_df['PM2.5'], mode='markers',
+                                     marker=dict(color='#00e5ff', opacity=0.6)))
+        fig_wind.update_layout(template="plotly_dark", height=350, margin=dict(l=0, r=0, t=30, b=0),
+                              xaxis_title="Wind Speed (km/h)", yaxis_title="PM2.5 Concentration (µg/m³)")
+        st.plotly_chart(fig_wind, use_container_width=True)
 
-st.markdown("---")
-# Add Raw Data Expander
-with st.expander("🔍 View Raw Analytics Data"):
+with tab3:
+    st.subheader("🚨 Live Public Alerts Feed")
+    if not spikes.empty:
+        recent_spikes = spikes.resample('D').first().dropna().tail(5).iloc[::-1]
+        for idx, row in recent_spikes.iterrows():
+            alert_msg = generate_alert(selected_city, row['Source'], row['PM2.5'])
+            st.error(f"**{idx.strftime('%Y-%m-%d %H:%00')}** | {alert_msg}")
+    else:
+        st.success(f"✅ Air quality stable. No recent anomalies detected in {selected_city}.")
+    
+    st.markdown("---")
+    st.markdown("### 🔍 Raw Analytics & Export")
     display_df = plot_df.reset_index()
     date_col_name = display_df.columns[0]
     display_df.rename(columns={date_col_name: 'Datetime'}, inplace=True)
     st.dataframe(display_df[['Datetime', 'PM2.5', 'PM10', 'NH3', 'CO', 'NO2', 'Is_Spike', 'Source']].tail(100), use_container_width=True)
     
-    # Download Button
     csv = display_df[['Datetime', 'PM2.5', 'PM10', 'NH3', 'CO', 'NO2', 'Is_Spike', 'Source']].to_csv(index=False).encode('utf-8')
     st.download_button(
         label="📥 Download Official Daily Report (CSV)",
