@@ -355,36 +355,7 @@ with tab2:
         for spine in ['top', 'right']: ax_bar.spines[spine].set_visible(False)
         st.pyplot(fig_bar)
         
-    st.markdown("---")
-    st.subheader("🔬 Chemical Fingerprint Radar (Latest Hour)")
-    
-    categories = ['PM10', 'NH3', 'CO', 'NO2', 'SO2']
-    max_vals = df[categories].max()
-    norm_vals = [latest_data[c] / max_vals[c] if max_vals[c] > 0 else 0 for c in categories]
-    
-    fig_radar = go.Figure()
-    fig_radar.add_trace(go.Scatterpolar(
-        r=norm_vals + [norm_vals[0]], 
-        theta=categories + [categories[0]], 
-        fill='toself',
-        fillcolor='rgba(56, 189, 248, 0.4)',
-        line=dict(color='#38bdf8'),
-        name='Current Fingerprint'
-    ))
-    fig_radar.update_layout(
-        polar=dict(
-            radialaxis=dict(visible=False, range=[0, 1]),
-            angularaxis=dict(color="white", tickfont=dict(size=14))
-        ),
-        showlegend=False,
-        template="plotly_dark",
-        height=400,
-        margin=dict(l=40, r=40, t=40, b=40),
-        paper_bgcolor='rgba(0,0,0,0)'
-    )
-    st.plotly_chart(fig_radar, use_container_width=True)
-    
-    st.markdown("---")
+
     st.subheader("🌩️ Meteorological Correlation Analytics")
     col_scatter, col_wind = st.columns(2)
     with col_scatter:
