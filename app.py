@@ -258,22 +258,27 @@ with tab1:
     for c in ["Lahore", "Karachi", "Islamabad", "Peshawar", "Quetta"]:
         c_df = df[df['City'] == c]
         if not c_df.empty:
-            latest = c_df.iloc[-1]['PM2.5']
-            map_data.append({"city": c, "lon": city_coords[c][0], "lat": city_coords[c][1], "pm25": latest, "radius": latest * 50})
+            latest = float(c_df.iloc[-1]['PM2.5'])
+            r = 255
+            g = max(0, int(255 - (latest * 2)))
+            b = 0
+            if latest <= 50:
+                r = 50; g = 255; b = 50
+            map_data.append({"city": c, "lon": city_coords[c][0], "lat": city_coords[c][1], "pm25": latest, "color": [r, g, b, 230]})
     
     map_df = pd.DataFrame(map_data)
     st.pydeck_chart(pdk.Deck(
         map_style='mapbox://styles/mapbox/dark-v10',
-        initial_view_state=pdk.ViewState(latitude=30.3753, longitude=69.3451, zoom=4.5, pitch=45),
+        initial_view_state=pdk.ViewState(latitude=30.3753, longitude=69.3451, zoom=4.5, pitch=50),
         layers=[
             pdk.Layer(
                 'ColumnLayer',
                 data=map_df,
                 get_position='[lon, lat]',
                 get_elevation='pm25',
-                elevation_scale=500,
-                radius=15000,
-                get_fill_color='[255, (255 - pm25*1.5), 0, 200]',
+                elevation_scale=4000,
+                radius=40000,
+                get_fill_color='color',
                 pickable=True,
                 auto_highlight=True,
             ),
